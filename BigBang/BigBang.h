@@ -10,4 +10,5 @@
 #import <objc/message.h>
 @interface BigBang : NSObject
 +(void)hookClass:(NSString*)hookString;
++(void)hookClass:(NSString*)hookString ignoreMethods:(NSArray *)ignoreMethods;
 @end
