@@ -22,7 +22,19 @@ return @(val); \
 
 #define KJLog NSLog
 
+static NSMutableSet *_hookedClassNames = nil;
+
 @implementation BigBang
+
++ (void)initialize
+{
+    if (self == [BigBang class]) {
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            _hookedClassNames = [NSMutableSet set];
+        });
+    }
+}
 
 +(void)hookClass:(NSString*)hookString {
     return [self hookClass:hookString ignoreMethods:nil];
@@ -30,6 +42,13 @@ return @(val); \
 
 +(void)hookClass:(NSString*)hookString ignoreMethods:(NSArray *)ignoreMethods
 {
+    
+    if ([_hookedClassNames containsObject:hookString]) {
+        return;
+    }
+    
+    [_hookedClassNames addObject:hookString];
+    
     Class hookClass = NSClassFromString(hookString);
     unsigned int outCount = 0;
     Method *methods = class_copyMethodList(hookClass, &outCount);
