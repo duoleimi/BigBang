@@ -20,7 +20,9 @@ type val = 0; \
 return @(val); \
 } while (0)
 
-#define KJLog NSLog
+#ifndef KJLog
+    #define KJLog NSLog
+#endif
 
 static NSMutableSet *_hookedClassNames = nil;
 
