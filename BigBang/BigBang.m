@@ -20,9 +20,15 @@ type val = 0; \
 return @(val); \
 } while (0)
 
+#define KJLog NSLog
+
 @implementation BigBang
 
-+(void)hookClass:(NSString*)hookString
++(void)hookClass:(NSString*)hookString {
+    return [self hookClass:hookString ignoreMethods:nil];
+}
+
++(void)hookClass:(NSString*)hookString ignoreMethods:(NSArray *)ignoreMethods
 {
     Class hookClass = NSClassFromString(hookString);
     unsigned int outCount = 0;
@@ -40,22 +46,22 @@ return @(val); \
         
         NSString *fuctionString =  @".cxx_destruct|dealloc|_isDeallocating|release|autorelease|retain|Retain|_tryRetain|copy|nsis_descriptionOfVariable:|respondsToSelector:|class|methodSignatureForSelector:|allowsWeakReference|etainWeakReference|init";
         
-        if ([selString hasPrefix:@"."]||[fuctionString containsString:selString]) {
+        if ([selString hasPrefix:@"."] || [fuctionString rangeOfString:selString].location != NSNotFound || [ignoreMethods containsObject:selString]) {
             continue;
         }
         NSString *hookedName = [BigBang methodLogMethodName:selString];
-        // printf("%s:%s\n",[hookString UTF8String],[hookedName UTF8String]);
+        // KJLog(@"%s:%s\n",[hookString UTF8String],[hookedName UTF8String]);
         class_addMethod(hookClass, NSSelectorFromString(hookedName), imp, typeEncoding);
         //将旧地址指向forward invocaton
         class_replaceMethod(hookClass, methodSel, [BigBang getMsgForwardIMP:hookClass sel:methodSel], typeEncoding);
     }
     
     IMP forwardInvocationImpl = imp_implementationWithBlock(^(id object, NSInvocation *invocation) {
-        //NSLog(@"hookString=%@",hookString);
+        //KJLog(@"hookString=%@",hookString);
         NSString *newSelectorName = [BigBang methodLogMethodName:NSStringFromSelector(invocation.selector)];
         invocation.selector = NSSelectorFromString(newSelectorName);
+        NSMutableDictionary *dic = [NSMutableDictionary dictionary];
         @try {
-            NSString *objString=[NSString stringWithFormat:@"%@",object];
             NSUInteger number = invocation.methodSignature.numberOfArguments;
             newSelectorName=[newSelectorName stringByReplacingOccurrencesOfString:BIGBANG withString:@""];
             NSString *returnType=[NSString stringWithUTF8String:invocation.methodSignature.methodReturnType];
@@ -63,25 +69,23 @@ return @(val); \
             returnType=[returnType stringByReplacingOccurrencesOfString:@"B" withString:@"BOOL"];
             returnType=[returnType stringByReplacingOccurrencesOfString:@"q" withString:@"NSNumber"];
             returnType=[returnType stringByReplacingOccurrencesOfString:@"@" withString:@"id"];
-           
-            id obj =[BigBang getReturnValueInvocatein:invocation];
-            NSString *retObj=[NSString stringWithFormat:@"%@",obj];
-            NSMutableString *muString=[[NSMutableString alloc] init];
+            
             for (long i=2; i<number; i++) {
- 
                 NSObject *ret = [BigBang argumentAtIndex:i withInvocatein:invocation];
                 NSString *classString = NSStringFromClass(ret.class);
-                [muString appendFormat:@"\nvalue%ld:%@-->%@",i-1,classString,ret];
+                dic[[NSString stringWithFormat:@"param%@",@(i-2)]] = [NSString stringWithFormat:@"%@-->%@", classString, ret];
             }
             
-            printf("-(%s)%s(have %ld value)\nreturn:%s%s\nobject:%s\n ##########################################\n",[returnType UTF8String],[newSelectorName UTF8String],number-2,[retObj UTF8String],[muString UTF8String],[objString UTF8String]);
-        } @catch (NSException *exception) {
-            NSLog(@"%@",[exception description]);
-        } @finally {
+            dic[@"obj"] = object;
+            dic[@"method"] = [NSString stringWithFormat:@"-(%@)%@",returnType,newSelectorName];
             
+        } @catch (NSException *exception) {
+            KJLog(@"%@",[exception description]);
         }
-
+        
         [invocation invoke];
+        dic[@"return"] = [BigBang getReturnValueInvocatein:invocation];
+        KJLog(@"%@\n", dic);
     });
     class_addMethod(hookClass, @selector(forwardInvocation:), forwardInvocationImpl, "v@:@");
     free(methods);
@@ -153,14 +157,14 @@ return @(val); \
 
 + (id)getReturnValueInvocatein:(NSInvocation *)invocation
 {
-
+    
     const char *returnType = invocation.methodSignature.methodReturnType;
     // Skip const type qualifier.
     if (returnType[0] == 'r') {
         returnType++;
     }
     
-    if (strcmp(returnType, @encode(id)) == 0 || strcmp(returnType, @encode(Class)) == 0 || strcmp(returnType, @encode(void (^)(void))) == 0) {
+    if (strcmp(returnType, @encode(id)) == 0 || strcmp(returnType, @encode(Class)) == 0 || strcmp(returnType, @encode(void (^)(void))) == 0 ) {
         __autoreleasing id returnObj;
         [invocation getReturnValue:&returnObj];
         return returnObj;
